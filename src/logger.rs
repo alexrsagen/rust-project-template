@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use env_logger::fmt::{Color, Style, StyledValue};
 use env_logger::Builder;
 use log::{Level, LevelFilter};
@@ -11,7 +11,7 @@ use crate::GLOBAL;
 pub fn try_init(level: LevelFilter) -> Result<()> {
     let mut builder = Builder::new();
 
-	builder.filter_level(level);
+    builder.filter_level(level);
 
     builder.format(|f, record| {
         use std::io::Write;
@@ -29,11 +29,19 @@ pub fn try_init(level: LevelFilter) -> Result<()> {
 
         let time = f.timestamp_millis();
 
-        writeln!(f, "[{}][{}][{}][MEM:{}] {}", time, level, target, GLOBAL.get_bytesize(), record.args(),)
+        writeln!(
+            f,
+            "[{}][{}][{}][MEM:{}] {}",
+            time,
+            level,
+            target,
+            GLOBAL.get_bytesize(),
+            record.args(),
+        )
     });
 
-	builder.try_init().context("could not initialize logger")?;
-	Ok(())
+    builder.try_init().context("could not initialize logger")?;
+    Ok(())
 }
 
 struct Padded<T> {

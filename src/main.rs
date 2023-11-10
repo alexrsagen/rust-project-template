@@ -19,5 +19,5 @@ async fn main() -> Result<()> {
     // load or create default config
     let config = config::Config::load_or_init(&args.config_path)?;
 
-	Ok(())
+    Ok(())
 }
