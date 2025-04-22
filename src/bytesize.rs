@@ -85,17 +85,65 @@ impl<U: Unit> Bytes<U> {
 
 impl<U: Unit> fmt::Display for Bytes<U> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		use fmt::{Alignment, Write};
+
 		let symbol = U::prefix_symbol(self.prefix);
 		let unit = if symbol.is_empty() {
-			"b"
+			'b'
 		} else {
-			"B"
+			'B'
 		};
-		if self.value.fract() == 0.0 {
-			write!(f, "{:.0} {}{}", self.value, symbol, unit)
+
+		// count expected amount of chars in output representation of value
+		let digit_chars_count = digit_count(self.value);
+		let decimal_chars_count = if self.value.fract() == 0.0 {
+			0
 		} else {
-			write!(f, "{:.2} {}{}", self.value, symbol, unit)
+			3 // decimal point + 2 digits
+		};
+
+		let symbol_chars_count = symbol.chars().count();
+
+		// count expected amount of chars in output
+		// (digits [+ decimal point + 2 digits] + space + symbol + unit)
+		let chars_count = digit_chars_count + decimal_chars_count + 1 + symbol_chars_count + 1;
+
+		// write left padding, for right alignment
+		if let (Some(width), Some(Alignment::Right)) = (f.width(), f.align()) {
+			for _ in 0..width.saturating_sub(chars_count) {
+				f.write_char(f.fill())?;
+			}
 		}
+
+		// write value (digits [+ decimal point + 2 digits])
+		if self.value.fract() == 0.0 {
+			write!(f, "{:.0}", self.value)?;
+		} else {
+			write!(f, "{:.2}", self.value)?;
+		}
+
+		// write space
+		f.write_char(f.fill())?;
+
+		// write center padding, for center alignment
+		if let (Some(width), Some(Alignment::Center)) = (f.width(), f.align()) {
+			for _ in 0..width.saturating_sub(chars_count) {
+				f.write_char(f.fill())?;
+			}
+		}
+
+		// write symbol and unit
+		f.write_str(symbol)?;
+		f.write_char(unit)?;
+
+		// write right padding, for left alignment
+		if let (Some(width), Some(Alignment::Left)) = (f.width(), f.align()) {
+			for _ in 0..width.saturating_sub(chars_count) {
+				f.write_char(f.fill())?;
+			}
+		}
+
+		Ok(())
 	}
 }
 
@@ -331,4 +379,20 @@ impl Unit for UnitBase10 {
 			Prefix::Quintillion => "Q",
 		}
 	}
+}
+
+fn digit_count(n: f64) -> usize {
+	let n = n.trunc() as u64;
+	let base = 10;
+    let mut power = base;
+    let mut count = 1;
+    while n >= power {
+        count += 1;
+        if let Some(new_power) = power.checked_mul(base) {
+            power = new_power;
+        } else {
+            break;
+        }
+    }
+    count
 }
