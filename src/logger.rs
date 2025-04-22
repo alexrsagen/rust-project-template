@@ -1,78 +1,98 @@
 use std::fmt;
+use fmt::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
-use env_logger::fmt::{Color, Style, StyledValue};
+use env_logger::fmt::style::Style;
 use env_logger::Builder;
-use log::{Level, LevelFilter};
+use log::LevelFilter;
 
 use crate::GLOBAL;
 
-pub fn try_init(level: LevelFilter) -> Result<()> {
+static TARGET_FORMATTER: PaddingFormatter = PaddingFormatter::new();
+static MEM_FORMATTER: PaddingFormatter = PaddingFormatter::new();
+
+pub fn try_init(level_filter: LevelFilter) -> Result<()> {
     let mut builder = Builder::new();
 
-    builder.filter_level(level);
+    builder.filter_level(level_filter);
 
     builder.format(|f, record| {
         use std::io::Write;
+
         let target = record.target();
-        let max_width = max_target_width(target);
+        let target_padded = TARGET_FORMATTER.pad(target);
 
-        let mut style = f.style();
-        let level = colored_level(&mut style, record.level());
+        let mem = GLOBAL.get_bytesize();
+        let mem_padded = MEM_FORMATTER.pad(mem);
 
-        let mut style = f.style();
-        let target = style.set_bold(true).value(Padded {
-            value: target,
-            width: max_width,
-        });
+        let args = record.args();
+
+        let level = record.level();
 
         let time = f.timestamp_millis();
 
-        writeln!(
-            f,
-            "[{}][{}][{}][MEM:{}] {}",
-            time,
-            level,
-            target,
-            GLOBAL.get_bytesize(),
-            record.args(),
-        )
+        let level_style = f.default_level_style(level);
+        let target_style = Style::new().bold();
+
+        writeln!(f, "[{time}][{level_style}{level}{level_style:#}][{target_style}{target_padded}{target_style:#}][MEM:{mem_padded}] {args}")
     });
 
     builder.try_init().context("could not initialize logger")?;
     Ok(())
 }
 
-struct Padded<T> {
+struct Padded<'a, T> {
     value: T,
-    width: usize,
+    formatter: &'a PaddingFormatter,
 }
 
-impl<T: fmt::Display> fmt::Display for Padded<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{: <width$}", self.value, width = self.width)
+impl<'a, T: fmt::Display> fmt::Display for Padded<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let max_width = self.formatter.max_width.load(Ordering::Relaxed);
+
+        let mut tw = TrackingWriter { writer: f, written_chars: 0 };
+        write!(tw, "{: <max_width$}", self.value)?;
+        let width = tw.written_chars;
+
+        if width > max_width {
+            self.formatter.max_width.store(width, Ordering::Relaxed);
+        }
+        Ok(())
     }
 }
 
-static MAX_MODULE_WIDTH: AtomicUsize = AtomicUsize::new(0);
+struct PaddingFormatter {
+    max_width: AtomicUsize,
+}
 
-fn max_target_width(target: &str) -> usize {
-    let max_width = MAX_MODULE_WIDTH.load(Ordering::Relaxed);
-    if max_width < target.len() {
-        MAX_MODULE_WIDTH.store(target.len(), Ordering::Relaxed);
-        target.len()
-    } else {
-        max_width
+impl PaddingFormatter {
+    const fn new() -> Self {
+        Self {
+            max_width: AtomicUsize::new(0)
+        }
+    }
+
+    fn pad<T: fmt::Display>(&self, value: T) -> Padded<T> {
+        Padded { value, formatter: self }
     }
 }
 
-fn colored_level(style: &mut Style, level: Level) -> StyledValue<'_, &'static str> {
-    match level {
-        Level::Trace => style.set_color(Color::Magenta).value("TRACE"),
-        Level::Debug => style.set_color(Color::Blue).value("DEBUG"),
-        Level::Info => style.set_color(Color::Green).value("INFO"),
-        Level::Warn => style.set_color(Color::Yellow).value("WARN"),
-        Level::Error => style.set_color(Color::Red).value("ERROR"),
+struct TrackingWriter<W> {
+    writer: W,
+    written_chars: usize,
+}
+
+impl<W: fmt::Write> fmt::Write for TrackingWriter<W> {
+    fn write_char(&mut self, c: char) -> fmt::Result {
+        self.writer.write_char(c)?;
+        self.written_chars += 1;
+        Ok(())
+    }
+
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.writer.write_str(s)?;
+        self.written_chars += s.chars().count();
+        Ok(())
     }
 }
