@@ -10,7 +10,6 @@ use log::LevelFilter;
 use crate::GLOBAL;
 
 static TARGET_FORMATTER: PaddingFormatter = PaddingFormatter::new();
-static MEM_FORMATTER: PaddingFormatter = PaddingFormatter::new();
 
 pub fn try_init(level_filter: LevelFilter) -> Result<()> {
     let mut builder = Builder::new();
@@ -24,7 +23,6 @@ pub fn try_init(level_filter: LevelFilter) -> Result<()> {
         let target_padded = TARGET_FORMATTER.pad(target);
 
         let mem = GLOBAL.get_bytesize();
-        let mem_padded = MEM_FORMATTER.pad(mem);
 
         let args = record.args();
 
@@ -35,7 +33,7 @@ pub fn try_init(level_filter: LevelFilter) -> Result<()> {
         let level_style = f.default_level_style(level);
         let target_style = Style::new().bold();
 
-        writeln!(f, "[{time}][{level_style}{level}{level_style:#}][{target_style}{target_padded}{target_style:#}][MEM:{mem_padded}] {args}")
+        writeln!(f, "[{time}][{level_style}{level:<5}{level_style:#}][{target_style}{target_padded}{target_style:#}][MEM:{mem:>10}] {args}")
     });
 
     builder.try_init().context("could not initialize logger")?;
