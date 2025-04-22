@@ -1,7 +1,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use bytesize::ByteSize;
+use crate::bytesize::BytesBase2;
 
 pub type SystemTrackingAllocator = TrackingAllocator<System>;
 
@@ -33,8 +33,8 @@ impl<A: GlobalAlloc> TrackingAllocator<A> {
     pub fn get(&self) -> usize {
         self.size.load(Ordering::SeqCst)
     }
-    pub fn get_bytesize(&self) -> ByteSize {
-        ByteSize::b(self.get() as u64)
+    pub fn get_bytesize(&self) -> BytesBase2 {
+        BytesBase2::from_bytes(self.get() as f64)
     }
 }
 
