@@ -71,7 +71,7 @@ impl<U: Unit> Bytes<U> {
 
 	pub fn from_bytes(bytes: f64) -> Self {
 		let prefix = U::max_prefix_for_value(bytes);
-		Self::from_prefix_value(prefix, bytes / U::thousand_value_f64())
+		Self::from_prefix_value(prefix, bytes / U::thousand_value_f64().powi(prefix.exponent() as i32))
 	}
 
 	pub fn to_bytes(&self) -> f64 {
